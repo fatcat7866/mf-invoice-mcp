@@ -1,39 +1,53 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import * as http from 'node:http';
-import type { OAuthTokens, OAuthConfig } from '../types/index.js';
+import type { OAuthTokens } from '../types/index.js';
+import type { ServiceConfig } from '../config.js';
+import { LEGACY_TOKENS_FILE } from '../config.js';
 
-const CONFIG_DIR = path.join(os.homedir(), '.config', 'mf-invoice-mcp');
-const TOKENS_FILE = path.join(CONFIG_DIR, 'tokens.json');
-
-const AUTH_URL = 'https://api.biz.moneyforward.com/authorize';
-const TOKEN_URL = 'https://api.biz.moneyforward.com/token';
 const DEFAULT_PORT = 38080;
-const DEFAULT_REDIRECT_URI = `http://localhost:${DEFAULT_PORT}/callback`;
+const OOB_REDIRECT_URI = 'urn:ietf:wg:oauth:2.0:oob';
 
 export class OAuthManager {
-  private config: OAuthConfig;
+  private config: ServiceConfig;
   private tokens: OAuthTokens | null = null;
   private server: http.Server | null = null;
   private port: number;
 
-  constructor(config: OAuthConfig) {
+  constructor(config: ServiceConfig) {
     this.config = config;
     this.port = parseInt(process.env.MF_CALLBACK_PORT || String(DEFAULT_PORT), 10);
+    this.migrateTokens();
     this.loadTokens();
   }
 
+  /** Migrate tokens from legacy path to new path (invoice only) */
+  private migrateTokens(): void {
+    if (this.config.name !== 'invoice') return;
+    const newPath = this.config.storage.tokensFile;
+    if (fs.existsSync(newPath)) return;
+    if (!fs.existsSync(LEGACY_TOKENS_FILE)) return;
+
+    try {
+      this.ensureConfigDir();
+      fs.copyFileSync(LEGACY_TOKENS_FILE, newPath);
+    } catch {
+      // Migration is best-effort
+    }
+  }
+
   private ensureConfigDir(): void {
-    if (!fs.existsSync(CONFIG_DIR)) {
-      fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    const dir = path.dirname(this.config.storage.tokensFile);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
   }
 
   private loadTokens(): void {
     try {
-      if (fs.existsSync(TOKENS_FILE)) {
-        const data = fs.readFileSync(TOKENS_FILE, 'utf-8');
+      const tokensFile = this.config.storage.tokensFile;
+      if (fs.existsSync(tokensFile)) {
+        const data = fs.readFileSync(tokensFile, 'utf-8');
         this.tokens = JSON.parse(data);
       }
     } catch {
@@ -46,21 +60,32 @@ export class OAuthManager {
     // Add expiration timestamp
     tokens.expires_at = Date.now() + tokens.expires_in * 1000;
     this.tokens = tokens;
-    fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2));
+    fs.writeFileSync(this.config.storage.tokensFile, JSON.stringify(tokens, null, 2));
+  }
+
+  private isOobMode(): boolean {
+    return !process.env.MF_REDIRECT_URI || process.env.MF_REDIRECT_URI === OOB_REDIRECT_URI;
+  }
+
+  getRedirectUri(): string {
+    if (this.isOobMode()) {
+      return OOB_REDIRECT_URI;
+    }
+    return process.env.MF_REDIRECT_URI || `http://localhost:${this.port}/callback`;
   }
 
   getAuthorizationUrl(): string {
     const params = new URLSearchParams({
       response_type: 'code',
-      client_id: this.config.clientId,
+      client_id: this.config.oauth.clientId,
       redirect_uri: this.getRedirectUri(),
-      scope: 'mfc/invoice/data.read mfc/invoice/data.write',
+      scope: this.config.oauth.scopes,
     });
-    return `${AUTH_URL}?${params.toString()}`;
+    return `${this.config.oauth.authorizeUrl}?${params.toString()}`;
   }
 
   async exchangeCode(code: string): Promise<OAuthTokens> {
-    const response = await fetch(TOKEN_URL, {
+    const response = await fetch(this.config.oauth.tokenUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -68,8 +93,8 @@ export class OAuthManager {
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code,
-        client_id: this.config.clientId,
-        client_secret: this.config.clientSecret,
+        client_id: this.config.oauth.clientId,
+        client_secret: this.config.oauth.clientSecret,
         redirect_uri: this.getRedirectUri(),
       }),
     });
@@ -89,7 +114,7 @@ export class OAuthManager {
       throw new Error('No refresh token available. Please re-authenticate.');
     }
 
-    const response = await fetch(TOKEN_URL, {
+    const response = await fetch(this.config.oauth.tokenUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -97,8 +122,8 @@ export class OAuthManager {
       body: new URLSearchParams({
         grant_type: 'refresh_token',
         refresh_token: this.tokens.refresh_token,
-        client_id: this.config.clientId,
-        client_secret: this.config.clientSecret,
+        client_id: this.config.oauth.clientId,
+        client_secret: this.config.oauth.clientSecret,
       }),
     });
 
@@ -114,7 +139,7 @@ export class OAuthManager {
 
   async getAccessToken(): Promise<string> {
     if (!this.tokens) {
-      throw new Error('Not authenticated. Please run mf_auth_start first.');
+      throw new Error(`Not authenticated. Please run mf_${this.config.name === 'invoice' ? '' : 'expense_'}auth_start first.`);
     }
 
     // Check if token is expired (with 5 minute buffer)
@@ -142,16 +167,29 @@ export class OAuthManager {
 
   clearTokens(): void {
     this.tokens = null;
-    if (fs.existsSync(TOKENS_FILE)) {
-      fs.unlinkSync(TOKENS_FILE);
+    const tokensFile = this.config.storage.tokensFile;
+    if (fs.existsSync(tokensFile)) {
+      fs.unlinkSync(tokensFile);
     }
   }
 
-  getRedirectUri(): string {
-    return this.config.redirectUri || `http://localhost:${this.port}/callback`;
+  getServiceName(): string {
+    return this.config.name;
   }
 
-  async startAuthFlow(): Promise<{ authUrl: string; tokenPromise: Promise<OAuthTokens> }> {
+  /**
+   * OOBモード: 認証URLを返すのみ。ユーザーがブラウザで認可後、
+   * 画面に表示されるコードを mf_auth_callback で入力する。
+   */
+  startOobFlow(): { authUrl: string } {
+    return { authUrl: this.getAuthorizationUrl() };
+  }
+
+  /**
+   * ローカルサーバーモード: コールバックサーバーを起動して自動でコードを受け取る。
+   * MF_REDIRECT_URI=http://localhost:38080/callback の場合に使用。
+   */
+  async startCallbackServerFlow(): Promise<{ authUrl: string; tokenPromise: Promise<OAuthTokens> }> {
     // Stop existing server if running
     if (this.server) {
       this.server.close();
@@ -167,7 +205,7 @@ export class OAuthManager {
           this.server = null;
         }
         reject(new Error('認証がタイムアウトしました（5分）'));
-      }, 5 * 60 * 1000); // 5 minutes timeout
+      }, 5 * 60 * 1000);
 
       this.server = http.createServer(async (req, res) => {
         const url = new URL(req.url || '', `http://localhost:${this.port}`);
@@ -233,27 +271,4 @@ export class OAuthManager {
       this.server = null;
     }
   }
-}
-
-// Singleton instance
-let oauthManager: OAuthManager | null = null;
-
-export function getOAuthManager(): OAuthManager {
-  if (!oauthManager) {
-    const clientId = process.env.MF_CLIENT_ID;
-    const clientSecret = process.env.MF_CLIENT_SECRET;
-    const port = parseInt(process.env.MF_CALLBACK_PORT || String(DEFAULT_PORT), 10);
-    const redirectUri = process.env.MF_REDIRECT_URI || `http://localhost:${port}/callback`;
-
-    if (!clientId || !clientSecret) {
-      throw new Error('MF_CLIENT_ID and MF_CLIENT_SECRET environment variables are required');
-    }
-
-    oauthManager = new OAuthManager({
-      clientId,
-      clientSecret,
-      redirectUri,
-    });
-  }
-  return oauthManager;
 }

@@ -1,36 +1,8 @@
-import { getOAuthManager } from '../auth/oauth.js';
+import { OAuthManager } from '../auth/oauth.js';
+import { getOAuthManager } from '../auth/registry.js';
+import { getServiceConfig, type ServiceName } from '../config.js';
+import { rateLimiter } from './rate-limiter.js';
 import type { ApiError } from '../types/index.js';
-
-const BASE_URL = 'https://invoice.moneyforward.com/api/v3';
-const RATE_LIMIT = 3; // requests per second
-const RATE_WINDOW = 1000; // 1 second in ms
-
-class RateLimiter {
-  private timestamps: number[] = [];
-
-  async waitForSlot(): Promise<void> {
-    const now = Date.now();
-
-    // Remove timestamps older than the rate window
-    this.timestamps = this.timestamps.filter(t => now - t < RATE_WINDOW);
-
-    if (this.timestamps.length >= RATE_LIMIT) {
-      // Calculate wait time until oldest timestamp expires
-      const oldestTimestamp = this.timestamps[0];
-      const waitTime = RATE_WINDOW - (now - oldestTimestamp) + 10; // +10ms buffer
-
-      if (waitTime > 0) {
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-        // Recursively check again after waiting
-        return this.waitForSlot();
-      }
-    }
-
-    this.timestamps.push(Date.now());
-  }
-}
-
-const rateLimiter = new RateLimiter();
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -39,13 +11,20 @@ export interface RequestOptions {
 }
 
 export class ApiClient {
+  private baseUrl: string;
+  private oauthManager: OAuthManager;
+
+  constructor(baseUrl: string, oauthManager: OAuthManager) {
+    this.baseUrl = baseUrl;
+    this.oauthManager = oauthManager;
+  }
+
   private async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     await rateLimiter.waitForSlot();
 
-    const oauthManager = getOAuthManager();
-    const accessToken = await oauthManager.getAccessToken();
+    const accessToken = await this.oauthManager.getAccessToken();
 
-    const url = new URL(`${BASE_URL}${endpoint}`);
+    const url = new URL(`${this.baseUrl}${endpoint}`);
 
     // Add query parameters
     if (options.params) {
@@ -116,7 +95,60 @@ export class ApiClient {
   async delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
+
+  async postFormData<T>(endpoint: string, formData: FormData): Promise<T> {
+    await rateLimiter.waitForSlot();
+
+    const accessToken = await this.oauthManager.getAccessToken();
+    const url = new URL(`${this.baseUrl}${endpoint}`);
+
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/json',
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+      try {
+        const errorBody = await response.json() as ApiError;
+        errorMessage = `${errorMessage}: ${errorBody.message || JSON.stringify(errorBody)}`;
+      } catch {
+        // ignore
+      }
+      throw new Error(errorMessage);
+    }
+
+    if (response.status === 204) {
+      return {} as T;
+    }
+
+    return await response.json() as T;
+  }
 }
 
-// Singleton instance
-export const apiClient = new ApiClient();
+// Factory functions for creating service-specific API clients
+const clients = new Map<ServiceName, ApiClient>();
+
+export function getApiClient(service: ServiceName): ApiClient {
+  let client = clients.get(service);
+  if (!client) {
+    const config = getServiceConfig(service);
+    const oauthManager = getOAuthManager(service);
+    client = new ApiClient(config.api.baseUrl, oauthManager);
+    clients.set(service, client);
+  }
+  return client;
+}
+
+// Convenience accessors
+export function getInvoiceClient(): ApiClient {
+  return getApiClient('invoice');
+}
+
+export function getExpenseClient(): ApiClient {
+  return getApiClient('expense');
+}

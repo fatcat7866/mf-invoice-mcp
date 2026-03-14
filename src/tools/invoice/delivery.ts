@@ -19,7 +19,7 @@ export const deliveryTools = {
         content: [
           {
             type: 'text' as const,
-            text: `⚠️ v3 API未サポート
+            text: `v3 API未サポート
 
 MoneyForward クラウド請求書 API v3 では、納品書作成エンドポイント（/delivery_slips/from_quote）が提供されていません。
 

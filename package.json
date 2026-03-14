@@ -1,10 +1,11 @@
 {
-  "name": "@tera911/mf-invoice-mcp",
-  "version": "1.0.1",
-  "description": "MCP plugin for MoneyForward Cloud Invoice API v3",
+  "name": "@tera911/mf-mcp",
+  "version": "2.0.0",
+  "description": "MCP plugin for MoneyForward Cloud Invoice & Expense APIs",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
+    "mf-mcp": "dist/index.js",
     "mf-invoice-mcp": "dist/index.js"
   },
   "files": [
@@ -20,6 +21,7 @@
     "mcp",
     "moneyforward",
     "invoice",
+    "expense",
     "api",
     "billing",
     "quote"

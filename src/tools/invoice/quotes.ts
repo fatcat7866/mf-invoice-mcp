@@ -6,9 +6,9 @@ import {
   updateQuote,
   downloadQuotePdf,
   convertQuoteToBilling,
-} from '../api/quotes.js';
-import { listPartnerDepartments } from '../api/partners.js';
-import type { QuoteStatus, InvoiceTemplateLineItem } from '../types/index.js';
+} from '../../api/invoice/quotes.js';
+import { listPartnerDepartments } from '../../api/invoice/partners.js';
+import type { QuoteStatus, InvoiceTemplateLineItem } from '../../types/index.js';
 
 const invoiceTemplateLineItemSchema = z.object({
   item_id: z.string().optional().describe('品目ID（マスタから選択する場合）'),

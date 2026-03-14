@@ -1,18 +1,20 @@
-// OAuth関連
-export interface OAuthTokens {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  expires_in: number;
-  expires_at?: number;
-  scope: string;
-}
+// 共通型 re-export
+export type { OAuthTokens, OAuthConfig, Pagination, ListResponse, ApiError } from './common.js';
 
-export interface OAuthConfig {
-  clientId: string;
-  clientSecret: string;
-  redirectUri: string;
-}
+// 経費API型 re-export
+export type {
+  Office,
+  ExTransaction,
+  ExReport,
+  ExReportApproval,
+  ExItem,
+  Excise,
+  Dept,
+  Project,
+  UploadReceiptResponse,
+  CreateExTransactionParams,
+  UpdateExTransactionParams,
+} from './expense.js';
 
 // 取引先
 export interface Partner {
@@ -293,18 +295,6 @@ export interface CreateInvoiceTemplateBillingParams {
   items?: InvoiceTemplateLineItem[];
 }
 
-// ページネーション
-export interface Pagination {
-  total_count: number;
-  total_pages: number;
-  current_page: number;
-  per_page: number;
-}
-
-export interface ListResponse<T> {
-  data: T[];
-  pagination: Pagination;
-}
 
 // 検索パラメータ
 export interface ListPartnersParams {
@@ -339,9 +329,3 @@ export interface ListBillingsParams {
   q?: string;
 }
 
-// APIエラー
-export interface ApiError {
-  code: string;
-  message: string;
-  errors?: Record<string, string[]>;
-}

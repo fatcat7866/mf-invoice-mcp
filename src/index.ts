@@ -9,21 +9,38 @@ import {
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
-import { authTools } from './tools/auth.js';
-import { partnerTools } from './tools/partners.js';
-import { itemTools } from './tools/items.js';
-import { quoteTools } from './tools/quotes.js';
-import { billingTools } from './tools/billings.js';
-import { deliveryTools } from './tools/delivery.js';
+// Invoice tools
+import { authTools } from './tools/invoice/auth.js';
+import { partnerTools } from './tools/invoice/partners.js';
+import { itemTools } from './tools/invoice/items.js';
+import { quoteTools } from './tools/invoice/quotes.js';
+import { billingTools } from './tools/invoice/billings.js';
+import { deliveryTools } from './tools/invoice/delivery.js';
+
+// Expense tools
+import { expenseAuthTools } from './tools/expense/auth.js';
+import { expenseOfficeTools } from './tools/expense/offices.js';
+import { expenseTransactionTools } from './tools/expense/transactions.js';
+import { expenseReportTools } from './tools/expense/reports.js';
+import { expenseReceiptTools } from './tools/expense/receipts.js';
+import { expenseMasterTools } from './tools/expense/master.js';
 
 // Combine all tools
 const allTools = {
+  // Invoice
   ...authTools,
   ...partnerTools,
   ...itemTools,
   ...quoteTools,
   ...billingTools,
   ...deliveryTools,
+  // Expense
+  ...expenseAuthTools,
+  ...expenseOfficeTools,
+  ...expenseTransactionTools,
+  ...expenseReportTools,
+  ...expenseReceiptTools,
+  ...expenseMasterTools,
 };
 
 type ToolName = keyof typeof allTools;
@@ -32,8 +49,8 @@ type ToolDef = (typeof allTools)[ToolName];
 // Create MCP server
 const server = new Server(
   {
-    name: 'mf-invoice-mcp',
-    version: '1.0.0',
+    name: 'mf-mcp',
+    version: '2.0.0',
   },
   {
     capabilities: {
@@ -106,7 +123,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('MF Invoice MCP Server started');
+  console.error('MF MCP Server started');
 }
 
 main().catch((error) => {

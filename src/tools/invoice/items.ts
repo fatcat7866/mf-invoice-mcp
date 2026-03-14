@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { listItems, getItem } from '../api/items.js';
+import { listItems, getItem } from '../../api/invoice/items.js';
 
 export const itemTools = {
   mf_list_items: {

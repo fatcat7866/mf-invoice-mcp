@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { listPartners, getPartner } from '../api/partners.js';
+import { listPartners, getPartner } from '../../api/invoice/partners.js';
 
 export const partnerTools = {
   mf_list_partners: {

@@ -1,4 +1,4 @@
-import { apiClient } from './client.js';
+import { getInvoiceClient } from '../client.js';
 import type {
   Billing,
   BillingItem,
@@ -10,10 +10,10 @@ import type {
   UpdateBillingParams,
   UpdatePaymentStatusParams,
   AddBillingItemParams,
-} from '../types/index.js';
+} from '../../types/index.js';
 
 export async function listBillings(params?: ListBillingsParams): Promise<ListResponse<Billing>> {
-  return apiClient.get<ListResponse<Billing>>('/billings', {
+  return getInvoiceClient().get<ListResponse<Billing>>('/billings', {
     page: params?.page,
     per_page: params?.per_page,
     partner_id: params?.partner_id,
@@ -25,26 +25,26 @@ export async function listBillings(params?: ListBillingsParams): Promise<ListRes
 }
 
 export async function getBilling(billingId: string): Promise<Billing> {
-  return apiClient.get<Billing>(`/billings/${billingId}`);
+  return getInvoiceClient().get<Billing>(`/billings/${billingId}`);
 }
 
 export async function createBilling(params: CreateBillingParams): Promise<Billing> {
   // v3 APIではitemsを含めずに請求書を作成
   const { items, ...billingParams } = params;
-  return apiClient.post<Billing>('/billings', { billing: billingParams });
+  return getInvoiceClient().post<Billing>('/billings', { billing: billingParams });
 }
 
 export async function addBillingItem(billingId: string, item: AddBillingItemParams): Promise<BillingItem> {
-  return apiClient.post<BillingItem>(`/billings/${billingId}/items`, { item });
+  return getInvoiceClient().post<BillingItem>(`/billings/${billingId}/items`, { item });
 }
 
 // インボイス制度対応の請求書作成
 export async function createInvoiceTemplateBilling(params: CreateInvoiceTemplateBillingParams): Promise<Billing> {
-  return apiClient.post<Billing>('/invoice_template_billings', params);
+  return getInvoiceClient().post<Billing>('/invoice_template_billings', params);
 }
 
 export async function createBillingFromQuote(params: CreateBillingFromQuoteParams): Promise<Billing> {
-  return apiClient.post<Billing>('/billings/from_quote', {
+  return getInvoiceClient().post<Billing>('/billings/from_quote', {
     quote_id: params.quote_id,
     billing: {
       billing_date: params.billing_date,
@@ -58,15 +58,15 @@ export async function createBillingFromQuote(params: CreateBillingFromQuoteParam
 }
 
 export async function updateBilling(billingId: string, params: UpdateBillingParams): Promise<Billing> {
-  return apiClient.patch<Billing>(`/billings/${billingId}`, { billing: params });
+  return getInvoiceClient().patch<Billing>(`/billings/${billingId}`, { billing: params });
 }
 
 export async function updatePaymentStatus(params: UpdatePaymentStatusParams): Promise<Billing> {
-  return apiClient.patch<Billing>(`/billings/${params.billing_id}`, {
+  return getInvoiceClient().patch<Billing>(`/billings/${params.billing_id}`, {
     billing: { payment_status: params.payment_status },
   });
 }
 
 export async function downloadBillingPdf(billingId: string): Promise<{ pdf_url: string }> {
-  return apiClient.get<{ pdf_url: string }>(`/billings/${billingId}/pdf`);
+  return getInvoiceClient().get<{ pdf_url: string }>(`/billings/${billingId}/pdf`);
 }
