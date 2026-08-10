@@ -30,8 +30,9 @@ const invoiceTemplateLineItemSchema = z.object({
   excise: z.enum(['untaxable', 'non_taxable', 'tax_exemption', 'five_percent', 'eight_percent', 'eight_percent_as_reduced_tax_rate', 'ten_percent']).describe('消費税区分（ten_percent: 10%, eight_percent_as_reduced_tax_rate: 軽減8%）'),
 });
 
-// MF v3 は payment_status を "0"/"1"/"2" で返す場合と、名前付きで返す場合がある。
-// どちらでも読めるようにし、未知の値は素通しする。
+// 書き込み時は "0"/"1"/"2"（api/invoice/billings.ts で変換）だが、
+// 読み取り時に MF が返すのは日本語ラベル（実API確認: "未設定" / "未入金"）。
+// 数値・英名・日本語のどれでも読めるようにし、未知の値は素通しする。
 const paymentStatusLabels: Record<string, string> = {
   '0': '未設定',
   '1': '未入金',
@@ -39,6 +40,9 @@ const paymentStatusLabels: Record<string, string> = {
   unset: '未設定',
   unsettled: '未入金',
   settled: '入金済み',
+  未設定: '未設定',
+  未入金: '未入金',
+  入金済み: '入金済み',
 };
 
 export const billingTools = {
