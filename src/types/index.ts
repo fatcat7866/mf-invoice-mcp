@@ -197,7 +197,9 @@ export interface Billing {
   updated_at: string;
 }
 
-export type PaymentStatus = 'unsettled' | 'settled';
+// MF v3 の payment_status は "0"=未設定 / "1"=未入金 / "2"=入金済み。
+// APIとの変換は api/invoice/billings.ts で行い、ツール層は意味のある名前で扱う。
+export type PaymentStatus = 'unset' | 'unsettled' | 'settled';
 
 export interface BillingItem {
   id?: string;
@@ -246,7 +248,10 @@ export interface UpdateBillingParams {
   billing_date?: string;
   due_date?: string;
   sales_date?: string;
-  items?: LineItem[];
+  billing_number?: string;
+  note?: string;
+  document_name?: string;
+  tag_names?: string[];
 }
 
 export interface UpdatePaymentStatusParams {
@@ -254,9 +259,12 @@ export interface UpdatePaymentStatusParams {
   payment_status: PaymentStatus;
 }
 
+// MF v3 BillingItemAttachRequest 準拠。item_id 未指定時は excise が必須。
 export interface AddBillingItemParams {
-  name: string;
-  code?: string;
+  item_id?: string;
+  name?: string;
+  delivery_number?: string;
+  delivery_date?: string;
   detail?: string;
   unit?: string;
   price: number;

@@ -7,9 +7,10 @@ import {
   disapproveExReport,
 } from '../../api/expense/reports.js';
 import type { ExTransaction } from '../../types/index.js';
+import { yen } from '../../utils/format.js';
 
 function formatTransaction(t: ExTransaction, idx: number): string {
-  return `  ${idx + 1}. ${t.remark || '(摘要なし)'}\n     金額: ¥${t.value.toLocaleString()}  日付: ${t.recognized_at || '-'}  科目: ${t.ex_item?.name || '-'}`;
+  return `  ${idx + 1}. ${t.remark || '(摘要なし)'}\n     金額: ${yen(t.value)}  日付: ${t.recognized_at || '-'}  科目: ${t.ex_item?.name || '-'}`;
 }
 
 export const expenseReportTools = {
@@ -34,7 +35,7 @@ export const expenseReportTools = {
         const text = reports
           .map(
             (r) =>
-              `- ${r.title || '(タイトルなし)'}\n  No: ${r.number || '-'}\n  金額: ¥${(r.total_value ?? 0).toLocaleString()}\n  状態: ${r.status || '-'}\n  ID: ${r.id}`
+              `- ${r.title || '(タイトルなし)'}\n  No: ${r.number || '-'}\n  金額: ${yen((r.total_value ?? 0))}\n  状態: ${r.status || '-'}\n  ID: ${r.id}`
           )
           .join('\n\n');
 
@@ -81,7 +82,7 @@ export const expenseReportTools = {
           content: [
             {
               type: 'text' as const,
-              text: `経費申請詳細\n\nID: ${r.id}\nタイトル: ${r.title || '-'}\nNo: ${r.number || '-'}\n状態: ${r.status || '-'}\n明細件数: ${transactions.length}件\n合計: ¥${total.toLocaleString()}\n提出日: ${r.submitted_at || '-'}\n承認日: ${r.approved_at || '-'}\n\n【明細】\n${transText}\n\n作成日: ${r.created_at || '-'}\n更新日: ${r.updated_at || '-'}`,
+              text: `経費申請詳細\n\nID: ${r.id}\nタイトル: ${r.title || '-'}\nNo: ${r.number || '-'}\n状態: ${r.status || '-'}\n明細件数: ${transactions.length}件\n合計: ${yen(total)}\n提出日: ${r.submitted_at || '-'}\n承認日: ${r.approved_at || '-'}\n\n【明細】\n${transText}\n\n作成日: ${r.created_at || '-'}\n更新日: ${r.updated_at || '-'}`,
             },
           ],
         };

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { listItems, getItem } from '../../api/invoice/items.js';
+import { yen } from '../../utils/format.js';
 
 export const itemTools = {
   mf_list_items: {
@@ -16,7 +17,7 @@ export const itemTools = {
         const itemsText = result.data
           .map(
             (i) =>
-              `- ${i.name}${i.code ? ` (${i.code})` : ''}\n  ID: ${i.id}\n  単価: ${i.price ? `¥${i.price.toLocaleString()}` : '-'}  数量: ${i.quantity ?? '-'}  単位: ${i.unit || '-'}`
+              `- ${i.name}${i.code ? ` (${i.code})` : ''}\n  ID: ${i.id}\n  単価: ${i.price ? `${yen(i.price)}` : '-'}  数量: ${i.quantity ?? '-'}  単位: ${i.unit || '-'}`
           )
           .join('\n');
 
@@ -54,7 +55,7 @@ export const itemTools = {
           content: [
             {
               type: 'text' as const,
-              text: `品目詳細\n\n名前: ${item.name}\nコード: ${item.code || '-'}\nID: ${item.id}\n詳細: ${item.detail || '-'}\n単価: ${item.price ? `¥${item.price.toLocaleString()}` : '-'}\n数量: ${item.quantity ?? '-'}\n単位: ${item.unit || '-'}\n源泉徴収: ${item.is_deduct_withholding_tax ? '対象' : '対象外'}\n消費税: ${item.excise || '-'}\n\n作成日: ${item.created_at}\n更新日: ${item.updated_at}`,
+              text: `品目詳細\n\n名前: ${item.name}\nコード: ${item.code || '-'}\nID: ${item.id}\n詳細: ${item.detail || '-'}\n単価: ${item.price ? `${yen(item.price)}` : '-'}\n数量: ${item.quantity ?? '-'}\n単位: ${item.unit || '-'}\n源泉徴収: ${item.is_deduct_withholding_tax ? '対象' : '対象外'}\n消費税: ${item.excise || '-'}\n\n作成日: ${item.created_at}\n更新日: ${item.updated_at}`,
             },
           ],
         };

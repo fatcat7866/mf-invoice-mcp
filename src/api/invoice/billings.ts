@@ -2,6 +2,7 @@ import { getInvoiceClient } from '../client.js';
 import type {
   Billing,
   BillingItem,
+  PaymentStatus,
   ListBillingsParams,
   ListResponse,
   CreateBillingParams,
@@ -34,8 +35,13 @@ export async function createBilling(params: CreateBillingParams): Promise<Billin
   return getInvoiceClient().post<Billing>('/billings', { billing: billingParams });
 }
 
+// MF v3 の BillingItemAttachRequest はフラットなボディ（{ item: ... } ラップではない）。
 export async function addBillingItem(billingId: string, item: AddBillingItemParams): Promise<BillingItem> {
-  return getInvoiceClient().post<BillingItem>(`/billings/${billingId}/items`, { item });
+  return getInvoiceClient().post<BillingItem>(`/billings/${billingId}/items`, item);
+}
+
+export async function deleteBillingItem(billingId: string, itemId: string): Promise<void> {
+  await getInvoiceClient().delete(`/billings/${billingId}/items/${itemId}`);
 }
 
 // インボイス制度対応の請求書作成
@@ -57,16 +63,46 @@ export async function createBillingFromQuote(params: CreateBillingFromQuoteParam
   });
 }
 
+// MF v3 は PUT /billings/{billing_id}。PATCH はルート未定義で404になる。
+// ボディは BillingUpdateRequest（フラット）で、items は受け付けない
+// （明細の増減は /billings/{id}/items 系エンドポイントを使う）。
 export async function updateBilling(billingId: string, params: UpdateBillingParams): Promise<Billing> {
-  return getInvoiceClient().patch<Billing>(`/billings/${billingId}`, { billing: params });
+  const { items, ...rest } = params as UpdateBillingParams & { items?: unknown };
+  if (items !== undefined) {
+    throw new Error(
+      '請求書の更新APIは明細（items）を受け付けません。明細の変更は mf_add_billing_item / mf_delete_billing_item を使ってください。'
+    );
+  }
+  return getInvoiceClient().put<Billing>(`/billings/${billingId}`, rest);
 }
 
+// MF v3 は PUT /billings/{billing_id}/payment_status。値は "0"=未設定 / "1"=未入金 / "2"=入金済み。
+const PAYMENT_STATUS_CODE: Record<PaymentStatus, string> = {
+  unset: '0',
+  unsettled: '1',
+  settled: '2',
+};
+
 export async function updatePaymentStatus(params: UpdatePaymentStatusParams): Promise<Billing> {
-  return getInvoiceClient().patch<Billing>(`/billings/${params.billing_id}`, {
-    billing: { payment_status: params.payment_status },
+  return getInvoiceClient().put<Billing>(`/billings/${params.billing_id}/payment_status`, {
+    payment_status: PAYMENT_STATUS_CODE[params.payment_status],
   });
 }
 
-export async function downloadBillingPdf(billingId: string): Promise<{ pdf_url: string }> {
-  return getInvoiceClient().get<{ pdf_url: string }>(`/billings/${billingId}/pdf`);
+export async function downloadBillingPdf(
+  billingId: string
+): Promise<{ pdf_url: string; pdf_base64: string; billing_number?: string }> {
+  // MF v3 は /billings/{id}/pdf という個別PDFエンドポイントを持たない。
+  // 請求書オブジェクトの pdf_url フィールドを読み、それを認証付きで取得する。
+  const client = getInvoiceClient();
+  const billing = await client.get<Billing>(`/billings/${billingId}`);
+  if (!billing.pdf_url) {
+    throw new Error('この請求書には pdf_url がありません（MF側でPDF未生成の可能性）');
+  }
+  const buf = await client.getBinary(billing.pdf_url, 'application/pdf');
+  return {
+    pdf_url: billing.pdf_url,
+    pdf_base64: buf.toString('base64'),
+    billing_number: billing.billing_number,
+  };
 }

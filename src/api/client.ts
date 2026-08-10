@@ -73,7 +73,14 @@ export class ApiClient {
       return {} as T;
     }
 
-    return await response.json() as T;
+    // MF v3 は 200/201 でも空ボディを返すことがある（明細の追加・削除など）。
+    // その場合 response.json() は SyntaxError を投げるので、先にテキストで受ける。
+    const text = await response.text();
+    if (!text.trim()) {
+      return {} as T;
+    }
+
+    return JSON.parse(text) as T;
   }
 
   async get<T>(endpoint: string, params?: Record<string, string | number | undefined>): Promise<T> {
@@ -94,6 +101,40 @@ export class ApiClient {
 
   async delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' });
+  }
+
+  /**
+   * 認証付きでバイナリ（PDF等）を取得する。
+   * urlOrEndpoint がフルURL（http〜）ならそのまま、そうでなければ baseUrl に連結する。
+   * MF v3 の pdf_url は baseUrl 配下の要認証パスなので Bearer を付けて取得する。
+   */
+  async getBinary(urlOrEndpoint: string, accept = 'application/pdf'): Promise<Buffer> {
+    await rateLimiter.waitForSlot();
+
+    const accessToken = await this.oauthManager.getAccessToken();
+    const target = /^https?:\/\//i.test(urlOrEndpoint)
+      ? urlOrEndpoint
+      : `${this.baseUrl}${urlOrEndpoint}`;
+
+    const response = await fetch(target, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': accept,
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        const retryAfter = parseInt(response.headers.get('Retry-After') || '1', 10);
+        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+        return this.getBinary(urlOrEndpoint, accept);
+      }
+      throw new Error(`Binary request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
   }
 
   async postFormData<T>(endpoint: string, formData: FormData): Promise<T> {

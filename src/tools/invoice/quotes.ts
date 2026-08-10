@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   listQuotes,
   getQuote,
@@ -9,6 +12,7 @@ import {
 } from '../../api/invoice/quotes.js';
 import { listPartnerDepartments } from '../../api/invoice/partners.js';
 import type { QuoteStatus, InvoiceTemplateLineItem } from '../../types/index.js';
+import { yen } from '../../utils/format.js';
 
 const invoiceTemplateLineItemSchema = z.object({
   item_id: z.string().optional().describe('品目ID（マスタから選択する場合）'),
@@ -59,7 +63,7 @@ export const quoteTools = {
         const quotesText = result.data
           .map(
             (q) =>
-              `- ${q.quote_number || 'No.'}\n  ${q.partner_name || '取引先未設定'}\n  タイトル: ${q.title || '-'}\n  見積日: ${q.quote_date || '-'}\n  合計: ¥${(q.total_price ?? 0).toLocaleString()}\n  状態: ${statusLabels[q.status] || q.status}\n  ID: ${q.id}`
+              `- ${q.quote_number || 'No.'}\n  ${q.partner_name || '取引先未設定'}\n  タイトル: ${q.title || '-'}\n  見積日: ${q.quote_date || '-'}\n  合計: ${yen((q.total_price ?? 0))}\n  状態: ${statusLabels[q.status] || q.status}\n  ID: ${q.id}`
           )
           .join('\n\n');
 
@@ -96,7 +100,7 @@ export const quoteTools = {
         const itemsText = quote.items
           .map(
             (i, idx) =>
-              `  ${idx + 1}. ${i.name}\n     単価: ¥${i.price.toLocaleString()} × ${i.quantity}${i.unit || ''} = ¥${(i.price * i.quantity).toLocaleString()}`
+              `  ${idx + 1}. ${i.name}\n     単価: ${yen(i.price)} × ${i.quantity}${i.unit || ''} = ${yen((i.price * i.quantity))}`
           )
           .join('\n');
 
@@ -104,7 +108,7 @@ export const quoteTools = {
           content: [
             {
               type: 'text' as const,
-              text: `見積書詳細\n\n見積番号: ${quote.quote_number || '-'}\nID: ${quote.id}\n取引先: ${quote.partner_name || '-'}\nタイトル: ${quote.title || '-'}\n見積日: ${quote.quote_date || '-'}\n有効期限: ${quote.expired_date || '-'}\n状態: ${statusLabels[quote.status] || quote.status}\n\n【明細】\n${itemsText || '明細なし'}\n\n小計: ¥${(quote.subtotal ?? 0).toLocaleString()}\n消費税: ¥${(quote.tax ?? 0).toLocaleString()}\n合計: ¥${(quote.total_price ?? 0).toLocaleString()}\n\nメモ: ${quote.memo || '-'}\n\n作成日: ${quote.created_at}\n更新日: ${quote.updated_at}`,
+              text: `見積書詳細\n\n見積番号: ${quote.quote_number || '-'}\nID: ${quote.id}\n取引先: ${quote.partner_name || '-'}\nタイトル: ${quote.title || '-'}\n見積日: ${quote.quote_date || '-'}\n有効期限: ${quote.expired_date || '-'}\n状態: ${statusLabels[quote.status] || quote.status}\n\n【明細】\n${itemsText || '明細なし'}\n\n小計: ${yen((quote.subtotal ?? 0))}\n消費税: ${yen((quote.tax ?? 0))}\n合計: ${yen((quote.total_price ?? 0))}\n\nメモ: ${quote.memo || '-'}\n\n作成日: ${quote.created_at}\n更新日: ${quote.updated_at}`,
             },
           ],
         };
@@ -161,7 +165,7 @@ export const quoteTools = {
           content: [
             {
               type: 'text' as const,
-              text: `見積書を作成しました\n\n見積番号: ${quote.quote_number || '-'}\nID: ${quote.id}\n取引先: ${quote.partner_name || '-'}\n合計: ¥${(quote.total_price ?? 0).toLocaleString()}`,
+              text: `見積書を作成しました\n\n見積番号: ${quote.quote_number || '-'}\nID: ${quote.id}\n取引先: ${quote.partner_name || '-'}\n合計: ${yen((quote.total_price ?? 0))}`,
             },
           ],
         };
@@ -204,7 +208,7 @@ export const quoteTools = {
           content: [
             {
               type: 'text' as const,
-              text: `見積書を更新しました\n\n見積番号: ${quote.quote_number || '-'}\nID: ${quote.id}\n取引先: ${quote.partner_name || '-'}\n合計: ¥${(quote.total_price ?? 0).toLocaleString()}`,
+              text: `見積書を更新しました\n\n見積番号: ${quote.quote_number || '-'}\nID: ${quote.id}\n取引先: ${quote.partner_name || '-'}\n合計: ${yen((quote.total_price ?? 0))}`,
             },
           ],
         };
@@ -222,19 +226,28 @@ export const quoteTools = {
   },
 
   mf_download_quote_pdf: {
-    description: '見積書のPDF URLを取得します',
+    description: '見積書のPDFをダウンロードしてローカルに保存します（save_path省略時は ~/Desktop に見積番号名で保存）',
     inputSchema: z.object({
       quote_id: z.string().describe('見積書ID'),
+      save_path: z
+        .string()
+        .optional()
+        .describe('保存先の絶対パス（.pdf）。省略時は ~/Desktop/<見積番号>.pdf'),
     }),
-    handler: async (args: { quote_id: string }) => {
+    handler: async (args: { quote_id: string; save_path?: string }) => {
       try {
         const result = await downloadQuotePdf(args.quote_id);
+
+        const defaultName = `${result.quote_number || args.quote_id}.pdf`;
+        const outPath = args.save_path || path.join(os.homedir(), 'Desktop', defaultName);
+        fs.mkdirSync(path.dirname(outPath), { recursive: true });
+        fs.writeFileSync(outPath, Buffer.from(result.pdf_base64, 'base64'));
 
         return {
           content: [
             {
               type: 'text' as const,
-              text: `見積書PDF URL:\n${result.pdf_url}`,
+              text: `見積書PDFを保存しました:\n保存先: ${outPath}\n見積番号: ${result.quote_number || '(不明)'}\npdf_url: ${result.pdf_url}`,
             },
           ],
         };
@@ -264,7 +277,7 @@ export const quoteTools = {
           content: [
             {
               type: 'text' as const,
-              text: `見積書を請求書に変換しました\n\n請求番号: ${billing.billing_number || '-'}\nID: ${billing.id}\n取引先: ${billing.partner_name || '-'}\n合計: ¥${(billing.total_price ?? 0).toLocaleString()}`,
+              text: `見積書を請求書に変換しました\n\n請求番号: ${billing.billing_number || '-'}\nID: ${billing.id}\n取引先: ${billing.partner_name || '-'}\n合計: ${yen((billing.total_price ?? 0))}`,
             },
           ],
         };

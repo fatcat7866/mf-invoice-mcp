@@ -7,11 +7,12 @@ import {
   deleteExTransaction,
 } from '../../api/expense/transactions.js';
 import type { ExTransaction } from '../../types/index.js';
+import { yen } from '../../utils/format.js';
 
 function formatTransaction(t: ExTransaction): string {
   return [
     `- No.${t.number} ${t.remark || '(摘要なし)'}`,
-    `  金額: ¥${t.value.toLocaleString()}`,
+    `  金額: ${yen(t.value)}`,
     `  日付: ${t.recognized_at || '-'}`,
     `  科目: ${t.ex_item?.name || '-'}`,
     `  税区分: ${t.dr_excise?.long_name || '-'}`,
@@ -85,7 +86,7 @@ export const expenseTransactionTools = {
           `ID: ${t.id}`,
           `No: ${t.number}`,
           `摘要: ${t.remark || '-'}`,
-          `金額: ¥${t.value.toLocaleString()}`,
+          `金額: ${yen(t.value)}`,
           `通貨: ${t.currency || 'JPY'}`,
           `日付: ${t.recognized_at || '-'}`,
           `科目: ${t.ex_item?.name || '-'}`,
@@ -154,7 +155,7 @@ export const expenseTransactionTools = {
           content: [
             {
               type: 'text' as const,
-              text: `経費明細を作成しました\n\nID: ${t.id}\nNo: ${t.number}\n摘要: ${t.remark || '-'}\n金額: ¥${t.value.toLocaleString()}\n日付: ${t.recognized_at || '-'}`,
+              text: `経費明細を作成しました\n\nID: ${t.id}\nNo: ${t.number}\n摘要: ${t.remark || '-'}\n金額: ${yen(t.value)}\n日付: ${t.recognized_at || '-'}`,
             },
           ],
         };
@@ -205,7 +206,7 @@ export const expenseTransactionTools = {
           content: [
             {
               type: 'text' as const,
-              text: `経費明細を更新しました\n\nID: ${t.id}\nNo: ${t.number}\n摘要: ${t.remark || '-'}\n金額: ¥${t.value.toLocaleString()}\n日付: ${t.recognized_at || '-'}`,
+              text: `経費明細を更新しました\n\nID: ${t.id}\nNo: ${t.number}\n摘要: ${t.remark || '-'}\n金額: ${yen(t.value)}\n日付: ${t.recognized_at || '-'}`,
             },
           ],
         };
