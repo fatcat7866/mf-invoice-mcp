@@ -189,8 +189,15 @@ export interface Billing {
   due_date?: string;
   sales_date?: string;
   payment_status: PaymentStatus;
+  // MF v3 は金額を文字列（"7000.0"）で返す。フィールド名は subtotal / tax ではなく
+  // subtotal_price / excise_price（2026-08-12 実レスポンスで確認）。
+  // 旧名は誤りだったため互換のため残すが、参照は *_price 側を使うこと。
+  subtotal_price?: number | string;
+  excise_price?: number | string;
+  total_price?: number | string;
+  /** @deprecated APIには存在しない。subtotal_price を使う */
   subtotal?: number;
-  total_price?: number;
+  /** @deprecated APIには存在しない。excise_price を使う */
   tax?: number;
   items: BillingItem[];
   created_at: string;
@@ -211,6 +218,10 @@ export interface BillingItem {
   quantity: number;
   is_deduct_withholding_tax?: boolean;
   excise?: string;
+  delivery_date?: string;
+  delivery_number?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface CreateBillingParams {

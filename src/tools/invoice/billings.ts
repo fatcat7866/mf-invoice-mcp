@@ -112,7 +112,7 @@ export const billingTools = {
         const itemsText = billing.items
           .map(
             (i, idx) =>
-              `  ${idx + 1}. ${i.name}\n     単価: ${yen(i.price)} × ${i.quantity}${i.unit || ''} = ${yen((i.price * i.quantity))}`
+              `  ${idx + 1}. ${i.name}\n     単価: ${yen(i.price)} × ${i.quantity}${i.unit || ''} = ${yen((Number(i.price) * Number(i.quantity)))}\n     明細ID: ${i.id || '-'}${i.detail ? `\n     詳細: ${i.detail}` : ''}`
           )
           .join('\n');
 
@@ -120,7 +120,7 @@ export const billingTools = {
           content: [
             {
               type: 'text' as const,
-              text: `請求書詳細\n\n請求番号: ${billing.billing_number || '-'}\nID: ${billing.id}\n取引先: ${billing.partner_name || '-'}\nタイトル: ${billing.title || '-'}\n請求日: ${billing.billing_date || '-'}\n売上日: ${billing.sales_date || '-'}\n支払期限: ${billing.due_date || '-'}\n入金状態: ${paymentStatusLabels[billing.payment_status] || billing.payment_status}\n支払条件: ${billing.payment_condition || '-'}\n\n【明細】\n${itemsText || '明細なし'}\n\n小計: ${yen((billing.subtotal ?? 0))}\n消費税: ${yen((billing.tax ?? 0))}\n合計: ${yen((billing.total_price ?? 0))}\n\nメモ: ${billing.memo || '-'}\n\n作成日: ${billing.created_at}\n更新日: ${billing.updated_at}`,
+              text: `請求書詳細\n\n請求番号: ${billing.billing_number || '-'}\nID: ${billing.id}\n取引先: ${billing.partner_name || '-'}\nタイトル: ${billing.title || '-'}\n請求日: ${billing.billing_date || '-'}\n売上日: ${billing.sales_date || '-'}\n支払期限: ${billing.due_date || '-'}\n入金状態: ${paymentStatusLabels[billing.payment_status] || billing.payment_status}\n支払条件: ${billing.payment_condition || '-'}\n\n【明細】\n${itemsText || '明細なし'}\n\n小計: ${yen((billing.subtotal_price ?? 0))}\n消費税: ${yen((billing.excise_price ?? 0))}\n合計: ${yen((billing.total_price ?? 0))}\n\nメモ: ${billing.memo || '-'}\n\n作成日: ${billing.created_at}\n更新日: ${billing.updated_at}`,
             },
           ],
         };
@@ -391,13 +391,23 @@ export const billingTools = {
         if (!item.item_id && !item.excise) {
           throw new Error('item_id を指定しない場合、excise（消費税区分）は必須です。');
         }
-        const created = await addBillingItem(billing_id, item);
+        await addBillingItem(billing_id, item);
+
+        // POST /billings/{id}/items は 201 を返すが **ボディが空**（2026-08-12 実測）。
+        // 追加された明細の情報は返ってこないので、請求書を再取得して最後の行を拾う。
+        // 明細IDは mf_delete_billing_item に必要なので、ここで必ず出す。
+        const billing = await getBilling(billing_id);
+        const added = billing.items[billing.items.length - 1];
+
+        const addedText = added
+          ? `明細ID: ${added.id || '-'}\n品目名: ${added.name || '-'}\n単価: ${yen(added.price)} × ${added.quantity}${added.unit || ''} = ${yen(Number(added.price) * Number(added.quantity))}`
+          : '（追加後の明細を取得できませんでした）';
 
         return {
           content: [
             {
               type: 'text' as const,
-              text: `明細を追加しました\n\n明細ID: ${created.id || '-'}\n品目名: ${created.name || '-'}\n単価: ${yen((created.price ?? 0))} × ${created.quantity ?? 0}`,
+              text: `明細を追加しました\n\n${addedText}\n\n請求書合計: ${yen((billing.total_price ?? 0))}（明細${billing.items.length}行）`,
             },
           ],
         };
